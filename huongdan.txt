@@ -1,0 +1,6 @@
+chạy file train_model.py để train dữ liệu
+
+pip install -r requirements.txt
+
+python app.py
+
