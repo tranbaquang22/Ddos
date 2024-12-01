@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Results</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Cảnh báo DDOS</h1>
+
+        {% if message %}
+            <div class="alert alert-info text-center">{{ message }}</div>
+        {% endif %}
+
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Source IP</th>
+                    <th>Destination IP</th>
+                    <th>Protocol</th>
+                    <th>Length</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for warning in warnings %}
+                <tr>
+                    <td>{{ warning.Source_IP }}</td>
+                    <td>{{ warning.Destination_IP }}</td>
+                    <td>{{ warning.protocol_type }}</td>
+                    <td>{{ warning.Length }}</td>
+                    <td>{{ warning.Time }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

