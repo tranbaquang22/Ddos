@@ -17,7 +17,7 @@ def index():
 def analyze():
     try:
         # Đọc dữ liệu đã lọc từ file
-        data = pd.read_csv("filtered_packets.csv", on_bad_lines='skip')
+        data = pd.read_csv("filtered_packets.csv", on_bad_lines="skip")
 
         # Định nghĩa các cột đặc trưng cần thiết
         required_features = [
@@ -65,20 +65,22 @@ def analyze():
             "dst_host_serror_rate", "dst_host_srv_serror_rate", "dst_host_rerror_rate",
             "dst_host_srv_rerror_rate"
         ]
+
+        # Dự đoán nhãn bằng mô hình
         predictions = model.predict(data[features_for_model])
         data["predicted_label"] = predictions
+        data["Status"] = data["predicted_label"].apply(lambda x: "Tấn công" if x == 1 else "Bình thường")
 
         # Lọc các cảnh báo (những mẫu dự đoán là tấn công)
         warnings = data[data["predicted_label"] == 1]
 
         # Hiển thị kết quả
-        return render_template("results.html", warnings=warnings.to_dict(orient="records"))
+        return render_template("results.html", warnings=warnings.to_dict(orient="records"), all_data=data.to_dict(orient="records"))
 
     except FileNotFoundError:
         return "File filtered_packets.csv không tồn tại. Vui lòng chạy packet_capture.py trước khi phân tích."
     except Exception as e:
         return f"Đã xảy ra lỗi: {e}"
-
 
 
 if __name__ == "__main__":
