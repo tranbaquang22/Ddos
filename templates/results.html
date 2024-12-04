@@ -6,38 +6,7 @@
 </head>
 <body>
     <div class="container mt-5">
-        <h1 class="text-center">Cảnh báo DDOS</h1>
 
-        <!-- Hiển thị các cảnh báo -->
-        {% if warnings %}
-            <div class="alert alert-danger text-center">Đã phát hiện tấn công DDoS!</div>
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Source IP</th>
-                        <th>Destination IP</th>
-                        <th>Protocol Type</th>
-                        <th>Source Bytes</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for warning in warnings %}
-                    <tr>
-                        <td>{{ warning.Time }}</td>
-                        <td>{{ warning.Source_IP }}</td>
-                        <td>{{ warning.Destination_IP }}</td>
-                        <td>{{ warning.protocol_type }}</td>
-                        <td>{{ warning.src_bytes }}</td>
-                        <td class="text-danger">{{ warning.Status }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <div class="alert alert-success text-center">Không phát hiện tấn công DDoS nào.</div>
-        {% endif %}
 
         <!-- Hiển thị toàn bộ dữ liệu -->
         <h2 class="text-center mt-4">Tất cả các gói tin</h2>
@@ -49,6 +18,7 @@
                     <th>Destination IP</th>
                     <th>Protocol Type</th>
                     <th>Source Bytes</th>
+                    <th>Count</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -60,6 +30,7 @@
                     <td>{{ packet.Destination_IP }}</td>
                     <td>{{ packet.protocol_type }}</td>
                     <td>{{ packet.src_bytes }}</td>
+                    <td>{{ packet.count }}</td>
                     <td class="{{ 'text-danger' if packet.Status == 'Tấn công' else 'text-success' }}">{{ packet.Status }}</td>
                 </tr>
                 {% endfor %}

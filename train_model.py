@@ -2,7 +2,6 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
-from imblearn.over_sampling import SMOTE
 import joblib
 
 # Đọc dữ liệu KDD Cup 99
@@ -37,15 +36,33 @@ for column in ["protocol_type", "service", "flag"]:
 X = data.drop(columns=["label"])
 y = data["label"]
 
-# Cân bằng dữ liệu
-smote = SMOTE(random_state=42)
-X_resampled, y_resampled = smote.fit_resample(X, y)
+# Tính ngưỡng cho các đặc trưng quan trọng
+important_features = ["count", "src_bytes", "dst_bytes", "duration"]
+thresholds = {}
 
-# Chia tập dữ liệu
-X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
+# Tách dữ liệu thành attack và normal
+attack_data = data[data["label"] == 1]
+normal_data = data[data["label"] == 0]
+
+for feature in important_features:
+    thresholds[feature] = {
+        "attack_mean": attack_data[feature].mean(),
+        "attack_std": attack_data[feature].std(),
+        "normal_mean": normal_data[feature].mean(),
+        "normal_std": normal_data[feature].std(),
+        "attack_75th_percentile": attack_data[feature].quantile(0.75),
+        "normal_75th_percentile": normal_data[feature].quantile(0.75)
+    }
+
+print("Ngưỡng tính toán từ dữ liệu:")
+for feature, stats in thresholds.items():
+    print(f"{feature}: {stats}")
+
+# Chia tập dữ liệu (KHÔNG sử dụng SMOTE)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Huấn luyện mô hình
-model = RandomForestClassifier(n_estimators=10, class_weight="balanced", random_state=42)
+model = RandomForestClassifier(n_estimators=100, max_depth=None, class_weight="balanced", random_state=42)
 model.fit(X_train, y_train)
 
 # Đánh giá mô hình
@@ -54,3 +71,7 @@ print(classification_report(y_test, y_pred, zero_division=1))
 
 # Lưu mô hình
 joblib.dump(model, "random_forest_model_balanced.pkl")
+
+# Kiểm tra tỷ lệ giữa các nhãn
+print("Tỷ lệ nhãn trước khi huấn luyện:")
+print(y.value_counts())

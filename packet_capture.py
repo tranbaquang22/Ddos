@@ -1,10 +1,10 @@
 from scapy.all import sniff, IP, TCP, UDP
 from scapy.config import conf
-from collections import Counter
-from datetime import datetime
-import csv
+from collections import defaultdict
+from datetime import datetime, timedelta
 import pandas as pd
 import joblib
+import csv
 
 # Tải mô hình đã huấn luyện
 model = joblib.load("random_forest_model_balanced.pkl")
@@ -24,22 +24,32 @@ features_for_model = [
     "dst_host_srv_rerror_rate"
 ]
 
-# Đếm số lượng gói tin theo IP nguồn
-ip_counter = Counter()
+# Ngưỡng được tính toán từ dữ liệu huấn luyện
+thresholds = {
+    "count": {"attack_mean": 8.16, "attack_std": 17.71, "normal_mean": 411.76, "normal_std": 156.27},
+    "src_bytes": {"attack_mean": 1157.05, "attack_std": 34226.12, "normal_mean": 3483.77, "normal_std": 1102603.83},
+    "dst_bytes": {"attack_mean": 3384.65, "attack_std": 37578.20, "normal_mean": 251.60, "normal_std": 31798.32},
+    "duration": {"attack_mean": 216.66, "attack_std": 1359.21, "normal_mean": 6.62, "normal_std": 402.56}
+}
 
-# Ngưỡng cảnh báo DDoS (có thể điều chỉnh)
-DDOS_THRESHOLD = 1000
+# Biến để nhóm gói tin
+packet_groups = defaultdict(list)
+
+# Thời gian hiện tại để nhóm gói tin
+current_window_start = datetime.now()
 
 # Tạo file CSV để lưu gói tin
 with open("filtered_packets.csv", "w", newline="", encoding="utf-8") as csv_file:
-    writer = csv.DictWriter(
-        csv_file,
-        fieldnames=["Time", "Source_IP", "Destination_IP", "Prediction", "Status"] + features_for_model
-    )
-    writer.writeheader()  # Tiêu đề cột
+    writer = csv.writer(csv_file)
+    writer.writerow([
+        "Time", "Source_IP", "Destination_IP", "count", "src_bytes", "dst_bytes",
+        "Prediction", "Status"
+    ] + features_for_model)  # Tiêu đề cột
 
 # Hàm xử lý gói tin
 def packet_callback(packet):
+    global current_window_start
+
     try:
         if not packet.haslayer(IP):
             return
@@ -58,88 +68,75 @@ def packet_callback(packet):
         else:
             protocol_type = 2  # ICMP hoặc khác
 
-        # Lấy các đặc trưng động
-        service = 1 if packet.haslayer(TCP) and packet[TCP].sport == 80 else 0  # Giả định HTTP
-        flag = 0 if packet.haslayer(TCP) else 1  # Giả định SF hoặc khác
+        # Tính toán nhóm gói tin
+        now = datetime.now()
+        if (now - current_window_start) > timedelta(seconds=15):  # Sau 15 giây, phân tích
+            analyze_packets()
+            current_window_start = now
 
-        # Tạo dữ liệu đầu vào cho mô hình
-        row = {
-            "duration": 1,
+        # Thêm gói tin vào nhóm
+        packet_groups[(source_ip, destination_ip)].append({
             "protocol_type": protocol_type,
-            "service": service,
-            "flag": flag,
             "src_bytes": packet_length,
-            "dst_bytes": len(packet[IP].payload) if packet.haslayer(IP) else 0,
-            "land": 1 if source_ip == destination_ip else 0,
-            "wrong_fragment": 0,
-            "urgent": 0,
-            "hot": 0,
-            "num_failed_logins": 0,
-            "logged_in": 1 if source_ip == "127.0.0.1" else 0,  # Giả định nếu là localhost
-            "num_compromised": 0,
-            "root_shell": 0,
-            "su_attempted": 0,
-            "num_root": 0,
-            "num_file_creations": 0,
-            "num_shells": 0,
-            "num_access_files": 0,
-            "num_outbound_cmds": 0,
-            "is_host_login": 0,
-            "is_guest_login": 0,
-            "count": 1,
-            "srv_count": 1,
-            "serror_rate": 0.0,
-            "srv_serror_rate": 0.0,
-            "rerror_rate": 0.0,
-            "srv_rerror_rate": 0.0,
-            "same_srv_rate": 1.0,
-            "diff_srv_rate": 0.0,
-            "srv_diff_host_rate": 0.0,
-            "dst_host_count": 1,
-            "dst_host_srv_count": 1,
-            "dst_host_same_srv_rate": 1.0,
-            "dst_host_diff_srv_rate": 0.0,
-            "dst_host_same_src_port_rate": 0.0,
-            "dst_host_srv_diff_host_rate": 0.0,
-            "dst_host_serror_rate": 0.0,
-            "dst_host_srv_serror_rate": 0.0,
-            "dst_host_rerror_rate": 0.0,
-            "dst_host_srv_rerror_rate": 0.0
-        }
-
-        # Chuyển đổi thành DataFrame để dự đoán
-        feature_values_df = pd.DataFrame([row], columns=features_for_model)
-
-        # Dự đoán
-        prediction = model.predict(feature_values_df)[0]
-        status = "Tấn công" if prediction == 1 else "Bình thường"
-
-        # Ghi dữ liệu vào file CSV
-        with open("filtered_packets.csv", "a", newline="", encoding="utf-8") as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow([
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                source_ip,
-                destination_ip,
-                prediction,
-                status
-            ] + list(row.values()))
-
-        # Hiển thị cảnh báo nếu phát hiện tấn công
-        if prediction == 1:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now}] [CẢNH BÁO] Tấn công từ IP: {source_ip}")
-            with open("ddos_alerts.log", "a", encoding="utf-8") as log_file:
-                log_file.write(f"[{now}] [CẢNH BÁO] Tấn công từ IP: {source_ip}\n")
-
-        # Cập nhật bộ đếm gói tin theo IP
-        ip_counter[source_ip] += 1
+            "dst_bytes": len(packet[IP].payload) if packet.haslayer(IP) else 0
+        })
 
     except Exception as e:
         print(f"Đã xảy ra lỗi: {e}")
 
-# Liệt kê các giao diện mạng khả dụng
-print("Các giao diện mạng khả dụng:", conf.ifaces)
+# Hàm phân tích các nhóm gói tin
+def analyze_packets():
+    global packet_groups
+
+    try:
+        # Tạo DataFrame để phân tích
+        rows = []
+        for (source_ip, destination_ip), packets in packet_groups.items():
+            count = len(packets)
+            src_bytes = sum(pkt["src_bytes"] for pkt in packets)
+            dst_bytes = sum(pkt["dst_bytes"] for pkt in packets)
+
+            # Sử dụng ngưỡng để phân loại trước
+            if count > thresholds["count"]["normal_mean"] or \
+               src_bytes > thresholds["src_bytes"]["normal_mean"] or \
+               dst_bytes > thresholds["dst_bytes"]["normal_mean"]:
+                prediction = 1  # Gắn nhãn "Tấn công" nếu vượt ngưỡng
+            else:
+                prediction = 0  # Gắn nhãn "Bình thường"
+
+            rows.append({
+                "Source_IP": source_ip,
+                "Destination_IP": destination_ip,
+                "count": count,
+                "src_bytes": src_bytes,
+                "dst_bytes": dst_bytes,
+                "Prediction": prediction
+            })
+
+        # Chuyển đổi thành DataFrame
+        df = pd.DataFrame(rows)
+
+        # Bổ sung các cột còn thiếu
+        for feature in features_for_model:
+            if feature not in df.columns:
+                df[feature] = 0
+
+        # Ghi vào CSV
+        with open("filtered_packets.csv", "a", newline="", encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            for _, row in df.iterrows():
+                writer.writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                 row["Source_IP"], row["Destination_IP"],
+                                 row["count"], row["src_bytes"], row["dst_bytes"],
+                                 row["Prediction"], 
+                                 "Tấn công" if row["Prediction"] == 1 else "Bình thường"
+                ] + list(row[features_for_model]))
+
+    except Exception as e:
+        print(f"Đã xảy ra lỗi trong khi phân tích gói tin: {e}")
+
+    # Reset nhóm gói tin
+    packet_groups.clear()
 
 # Bắt gói tin mạng
 print("Đang giám sát mạng...")
