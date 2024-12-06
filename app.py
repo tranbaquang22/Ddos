@@ -12,8 +12,8 @@ def index():
 @app.route("/analyze", methods=["GET"])
 def analyze():
     try:
-        # Đọc dữ liệu đã lọc từ file
-        data = pd.read_csv("filtered_packets.csv", on_bad_lines="skip")
+        # Đọc dữ liệu đã phân tích từ file
+        data = pd.read_csv("analyzed_packets.csv", on_bad_lines="skip")
 
         # Đảm bảo cột Time tồn tại
         if "Time" not in data.columns:
@@ -32,9 +32,11 @@ def analyze():
         return render_template(
             "results.html",
             warnings=warnings.to_dict(orient="records"),
-            all_data=data.to_dict(orient="records"),
-            normal_data=normal.to_dict(orient="records")  # Thêm dữ liệu bình thường
+            normal_data=normal.to_dict(orient="records"),
+            all_data=data.to_dict(orient="records")
         )
+    except FileNotFoundError:
+        return "File 'analyzed_packets.csv' không tồn tại. Hãy chạy phân tích trước."
     except Exception as e:
         return f"Đã xảy ra lỗi: {e}"
 

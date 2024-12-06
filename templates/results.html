@@ -1,41 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Results</title>
+    <title>Kết quả phân tích</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css">
 </head>
 <body>
     <div class="container mt-5">
+        <h1 class="text-center">Kết quả phân tích</h1>
 
+        <!-- Hiển thị các cảnh báo -->
+        <h2 class="mt-4">Cảnh báo (Tấn công)</h2>
+        {% if warnings %}
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Source IP</th>
+                        <th>Destination IP</th>
+                        <th>Count</th>
+                        <th>Src Bytes</th>
+                        <th>Dst Bytes</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for warning in warnings %}
+                    <tr>
+                        <td>{{ warning.Time }}</td>
+                        <td>{{ warning.Source_IP }}</td>
+                        <td>{{ warning.Destination_IP }}</td>
+                        <td>{{ warning.count }}</td>
+                        <td>{{ warning.src_bytes }}</td>
+                        <td>{{ warning.dst_bytes }}</td>
+                        <td class="text-danger">{{ warning.Status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="alert alert-success text-center">Không phát hiện tấn công DDoS nào.</div>
+        {% endif %}
 
-        <!-- Hiển thị toàn bộ dữ liệu -->
-        <h2 class="text-center mt-4">Tất cả các gói tin</h2>
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Source IP</th>
-                    <th>Destination IP</th>
-                    <th>Protocol Type</th>
-                    <th>Source Bytes</th>
-                    <th>Count</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for packet in all_data %}
-                <tr>
-                    <td>{{ packet.Time }}</td>
-                    <td>{{ packet.Source_IP }}</td>
-                    <td>{{ packet.Destination_IP }}</td>
-                    <td>{{ packet.protocol_type }}</td>
-                    <td>{{ packet.src_bytes }}</td>
-                    <td>{{ packet.count }}</td>
-                    <td class="{{ 'text-danger' if packet.Status == 'Tấn công' else 'text-success' }}">{{ packet.Status }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <!-- Hiển thị các bản ghi bình thường -->
+        <h2 class="mt-4">Dữ liệu bình thường</h2>
+        {% if normal_data %}
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Source IP</th>
+                        <th>Destination IP</th>
+                        <th>Count</th>
+                        <th>Src Bytes</th>
+                        <th>Dst Bytes</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for normal in normal_data %}
+                    <tr>
+                        <td>{{ normal.Time }}</td>
+                        <td>{{ normal.Source_IP }}</td>
+                        <td>{{ normal.Destination_IP }}</td>
+                        <td>{{ normal.count }}</td>
+                        <td>{{ normal.src_bytes }}</td>
+                        <td>{{ normal.dst_bytes }}</td>
+                        <td class="text-success">{{ normal.Status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="alert alert-info text-center">Không có dữ liệu bình thường.</div>
+        {% endif %}
     </div>
 </body>
 </html>

@@ -1,7 +1,6 @@
 from scapy.all import sniff, IP, TCP, UDP
-from scapy.config import conf
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 import joblib
 import csv
@@ -24,32 +23,11 @@ features_for_model = [
     "dst_host_srv_rerror_rate"
 ]
 
-# Ngưỡng được tính toán từ dữ liệu huấn luyện
-thresholds = {
-    "count": {"attack_mean": 8.16, "attack_std": 17.71, "normal_mean": 411.76, "normal_std": 156.27},
-    "src_bytes": {"attack_mean": 1157.05, "attack_std": 34226.12, "normal_mean": 3483.77, "normal_std": 1102603.83},
-    "dst_bytes": {"attack_mean": 3384.65, "attack_std": 37578.20, "normal_mean": 251.60, "normal_std": 31798.32},
-    "duration": {"attack_mean": 216.66, "attack_std": 1359.21, "normal_mean": 6.62, "normal_std": 402.56}
-}
-
-# Biến để nhóm gói tin
+# Biến để lưu gói tin đã thu thập
 packet_groups = defaultdict(list)
-
-# Thời gian hiện tại để nhóm gói tin
-current_window_start = datetime.now()
-
-# Tạo file CSV để lưu gói tin
-with open("filtered_packets.csv", "w", newline="", encoding="utf-8") as csv_file:
-    writer = csv.writer(csv_file)
-    writer.writerow([
-        "Time", "Source_IP", "Destination_IP", "count", "src_bytes", "dst_bytes",
-        "Prediction", "Status"
-    ] + features_for_model)  # Tiêu đề cột
 
 # Hàm xử lý gói tin
 def packet_callback(packet):
-    global current_window_start
-
     try:
         if not packet.haslayer(IP):
             return
@@ -68,13 +46,7 @@ def packet_callback(packet):
         else:
             protocol_type = 2  # ICMP hoặc khác
 
-        # Tính toán nhóm gói tin
-        now = datetime.now()
-        if (now - current_window_start) > timedelta(seconds=15):  # Sau 15 giây, phân tích
-            analyze_packets()
-            current_window_start = now
-
-        # Thêm gói tin vào nhóm
+        # Gộp các gói tin trùng lặp dựa trên IP nguồn và đích
         packet_groups[(source_ip, destination_ip)].append({
             "protocol_type": protocol_type,
             "src_bytes": packet_length,
@@ -82,65 +54,61 @@ def packet_callback(packet):
         })
 
     except Exception as e:
-        print(f"Đã xảy ra lỗi: {e}")
+        print(f"Đã xảy ra lỗi trong callback: {e}")
 
-# Hàm phân tích các nhóm gói tin
+# Phân tích dữ liệu
 def analyze_packets():
-    global packet_groups
-
     try:
-        # Tạo DataFrame để phân tích
+        # Tạo DataFrame từ các gói tin đã thu thập
         rows = []
         for (source_ip, destination_ip), packets in packet_groups.items():
             count = len(packets)
             src_bytes = sum(pkt["src_bytes"] for pkt in packets)
             dst_bytes = sum(pkt["dst_bytes"] for pkt in packets)
 
-            # Sử dụng ngưỡng để phân loại trước
-            if count > thresholds["count"]["normal_mean"] or \
-               src_bytes > thresholds["src_bytes"]["normal_mean"] or \
-               dst_bytes > thresholds["dst_bytes"]["normal_mean"]:
-                prediction = 1  # Gắn nhãn "Tấn công" nếu vượt ngưỡng
-            else:
-                prediction = 0  # Gắn nhãn "Bình thường"
-
-            rows.append({
+            row_data = {
+                "Time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "Source_IP": source_ip,
                 "Destination_IP": destination_ip,
                 "count": count,
                 "src_bytes": src_bytes,
-                "dst_bytes": dst_bytes,
-                "Prediction": prediction
-            })
+                "dst_bytes": dst_bytes
+            }
+
+            # Bổ sung các đặc trưng còn thiếu để phù hợp với mô hình
+            for feature in features_for_model:
+                if feature not in row_data:
+                    row_data[feature] = 0  # Giá trị mặc định nếu không có thông tin
+
+            rows.append(row_data)
 
         # Chuyển đổi thành DataFrame
         df = pd.DataFrame(rows)
 
-        # Bổ sung các cột còn thiếu
-        for feature in features_for_model:
-            if feature not in df.columns:
-                df[feature] = 0
+        # Lưu DataFrame vào file CSV (raw data)
+        df.to_csv("aggregated_packets.csv", index=False)
 
-        # Ghi vào CSV
-        with open("filtered_packets.csv", "a", newline="", encoding="utf-8") as csv_file:
-            writer = csv.writer(csv_file)
-            for _, row in df.iterrows():
-                writer.writerow([datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                 row["Source_IP"], row["Destination_IP"],
-                                 row["count"], row["src_bytes"], row["dst_bytes"],
-                                 row["Prediction"], 
-                                 "Tấn công" if row["Prediction"] == 1 else "Bình thường"
-                ] + list(row[features_for_model]))
+        # Sử dụng mô hình để phân tích
+        if not df.empty:
+            df["Prediction"] = model.predict(df[features_for_model])
+            df["Status"] = df["Prediction"].apply(lambda x: "Tấn công" if x == 0 else "Bình thường")
+        else:
+            print("Không có gói tin để phân tích.")
+
+        # Lưu kết quả phân tích vào file CSV
+        df.to_csv("analyzed_packets.csv", index=False)
+        print("Phân tích hoàn tất. Kết quả lưu trong 'analyzed_packets.csv'.")
 
     except Exception as e:
         print(f"Đã xảy ra lỗi trong khi phân tích gói tin: {e}")
 
-    # Reset nhóm gói tin
-    packet_groups.clear()
-
 # Bắt gói tin mạng
-print("Đang giám sát mạng...")
+print("Đang giám sát mạng... Nhấn Ctrl+C để dừng.")
 try:
-    sniff(prn=packet_callback, filter="ip", store=False, count=0)
+    sniff(prn=packet_callback, filter="ip", store=False, timeout=60)  # Thu thập trong 60 giây
+    print("Thu thập gói tin hoàn tất. Đang phân tích...")
+    analyze_packets()
 except KeyboardInterrupt:
     print("\nĐã dừng giám sát mạng.")
+    print("Đang phân tích...")
+    analyze_packets()
